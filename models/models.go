@@ -10,7 +10,7 @@ type User struct {
 	gorm.Model
 	Name     string `json:"name"`
 	Email    string `json:"email"`
-	Password string `json:"password"`
+	Password string `json:"-"`
 }
 
 type AuthSession struct {

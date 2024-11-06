@@ -7,12 +7,13 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
 
-	"github.com/golang-jwt/jwt"
+	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"github.com/labstack/echo/v4"
 	"golang.org/x/crypto/argon2"
@@ -61,7 +62,7 @@ func GenerateTokens(userId uint) (string, string, error) {
 		"iss": "drop",
 		"sub": strconv.Itoa(int(userId)),
 		"iat": time.Now().Unix(),
-		"exp": time.Now().Add(time.Hour * 24).Unix(),
+		"exp": time.Now().Add(time.Second * 5).Unix(),
 	})
 
 	tokenString, err := token.SignedString([]byte("restinpeace"))
@@ -141,6 +142,7 @@ func SignIn(c echo.Context) error {
 
 func RefreshAuth(c echo.Context) error {
 	authHeader := c.Request().Header.Get("Authorization")
+	log.Println(authHeader)
 	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
 		return errors.New("invalid token")
 	}
@@ -153,7 +155,9 @@ func RefreshAuth(c echo.Context) error {
 		return []byte("restinpeace"), nil
 	})
 	if err != nil {
-		return err
+		if err.Error() != "token has invalid claims: token is expired" {
+			return err
+		}
 	}
 
 	subject := ""
@@ -192,4 +196,31 @@ func RefreshAuth(c echo.Context) error {
 	})
 
 	return c.NoContent(http.StatusOK)
+}
+
+func GetAuthenticatedUser(c echo.Context) error {
+	userId := GetUserId(c)
+	user := &models.User{}
+
+	db.DB.Find(&user, userId)
+	return c.JSON(http.StatusOK, user)
+}
+
+func GetUserId(c echo.Context) uint {
+	user := c.Get("user").(*jwt.Token)
+	claims := user.Claims.(jwt.MapClaims)
+
+	subject := ""
+
+	for key, val := range claims {
+		if key == "sub" {
+			subject = val.(string)
+		}
+	}
+
+	sub, err := strconv.Atoi(subject)
+	if err != nil {
+		return 0
+	}
+	return uint(sub)
 }
