@@ -2,13 +2,14 @@ package lib
 
 import (
 	"drop/handlers"
+	"os"
 
 	echojwt "github.com/labstack/echo-jwt/v4"
 	"github.com/labstack/echo/v4"
 )
 
 func InitRoutes(e *echo.Echo) {
-	authMiddleware := echojwt.JWT([]byte("restinpeace"))
+	authMiddleware := echojwt.JWT([]byte(os.Getenv("JWT_SECRET")))
 
 	e.GET("/ws", handlers.WsHandler)
 

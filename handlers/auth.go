@@ -7,8 +7,8 @@ import (
 	"encoding/base64"
 	"errors"
 	"fmt"
-	"log"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"time"
@@ -20,16 +20,19 @@ import (
 )
 
 type SignUpDto struct {
-	Name     string `json:"name"`
-	Email    string `json:"email"`
-	Username string `json:"username"`
-	Password string `json:"password"`
+	Name     string `json:"name" validate:"required"`
+	Email    string `json:"email" validate:"required,email"`
+	Username string `json:"username" validate:"required"`
+	Password string `json:"password" validate:"required,min=4"`
 }
 
 func SignUp(c echo.Context) error {
 	dto := &SignUpDto{}
 	if err := c.Bind(&dto); err != nil {
 		return err
+	}
+	if err := c.Validate(dto); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err)
 	}
 	user := &models.User{}
 	db.DB.Limit(1).Find(&user, "email = ?", dto.Email)
@@ -40,7 +43,7 @@ func SignUp(c echo.Context) error {
 		})
 	}
 
-	hash := argon2.IDKey([]byte(dto.Password), []byte("restinpeace"), 1, 64*1024, 4, 32)
+	hash := argon2.IDKey([]byte(dto.Password), []byte(os.Getenv("JWT_SECRET")), 1, 64*1024, 4, 32)
 	user.Name = dto.Name
 	user.Username = dto.Username
 	user.Email = dto.Email
@@ -54,11 +57,6 @@ func SignUp(c echo.Context) error {
 	return c.JSON(http.StatusCreated, &user)
 }
 
-type SignInDto struct {
-	Username string `json:"username"`
-	Password string `json:"password"`
-}
-
 func GenerateTokens(userId uint) (string, string, error) {
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, &jwt.MapClaims{
 		"iss": "drop",
@@ -67,7 +65,7 @@ func GenerateTokens(userId uint) (string, string, error) {
 		"exp": time.Now().Add(time.Second * 5).Unix(),
 	})
 
-	tokenString, err := token.SignedString([]byte("restinpeace"))
+	tokenString, err := token.SignedString([]byte(os.Getenv("JWT_SECRET")))
 	if err != nil {
 		return "", "", err
 	}
@@ -99,10 +97,19 @@ func GenerateTokens(userId uint) (string, string, error) {
 	return tokenString, authSession.RefreshToken, nil
 }
 
+type SignInDto struct {
+	Username string `json:"username" validate:"required"`
+	Password string `json:"password" validate:"required,min=4"`
+}
+
 func SignIn(c echo.Context) error {
 	dto := &SignInDto{}
 	if err := c.Bind(&dto); err != nil {
-		return err
+		return echo.NewHTTPError(http.StatusBadRequest)
+	}
+
+	if err := c.Validate(dto); err != nil {
+		return echo.NewHTTPError(http.StatusBadRequest, err)
 	}
 
 	user := &models.User{}
@@ -113,7 +120,7 @@ func SignIn(c echo.Context) error {
 		})
 	}
 
-	hash := argon2.IDKey([]byte(dto.Password), []byte("restinpeace"), 1, 64*1024, 4, 32)
+	hash := argon2.IDKey([]byte(dto.Password), []byte(os.Getenv("JWT_SECRET")), 1, 64*1024, 4, 32)
 	originalHash, err := base64.RawStdEncoding.DecodeString(user.Password)
 	if err != nil {
 		return err
@@ -144,7 +151,6 @@ func SignIn(c echo.Context) error {
 
 func RefreshAuth(c echo.Context) error {
 	authHeader := c.Request().Header.Get("Authorization")
-	log.Println(authHeader)
 	if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
 		return errors.New("invalid token")
 	}
@@ -154,7 +160,7 @@ func RefreshAuth(c echo.Context) error {
 	claims := jwt.MapClaims{}
 
 	_, err := jwt.ParseWithClaims(tokenString, claims, func(t *jwt.Token) (interface{}, error) {
-		return []byte("restinpeace"), nil
+		return []byte(os.Getenv("JWT_SECRET")), nil
 	})
 	if err != nil {
 		if err.Error() != "token has invalid claims: token is expired" {
