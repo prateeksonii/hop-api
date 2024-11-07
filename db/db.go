@@ -23,4 +23,5 @@ func InitDB() {
 func migrate() {
 	DB.AutoMigrate(&models.User{})
 	DB.AutoMigrate(&models.AuthSession{})
+	DB.AutoMigrate(&models.Contact{})
 }

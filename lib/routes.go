@@ -8,14 +8,17 @@ import (
 )
 
 func InitRoutes(e *echo.Echo) {
+	authMiddleware := echojwt.JWT([]byte("restinpeace"))
+
 	e.GET("/ws", handlers.WsHandler)
 
 	g := e.Group("/auth")
 	g.POST("/signup", handlers.SignUp)
 	g.POST("/signin", handlers.SignIn)
 	g.POST("/refresh", handlers.RefreshAuth)
+	g.GET("/availability/:username", handlers.CheckUsername)
+	g.GET("/me", handlers.GetAuthenticatedUser, authMiddleware)
 
 	g = e.Group("/api")
-	g.Use(echojwt.JWT([]byte("restinpeace")))
-	g.GET("/me", handlers.GetAuthenticatedUser)
+	g.Use(authMiddleware)
 }

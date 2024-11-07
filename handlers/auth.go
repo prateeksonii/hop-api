@@ -22,6 +22,7 @@ import (
 type SignUpDto struct {
 	Name     string `json:"name"`
 	Email    string `json:"email"`
+	Username string `json:"username"`
 	Password string `json:"password"`
 }
 
@@ -41,6 +42,7 @@ func SignUp(c echo.Context) error {
 
 	hash := argon2.IDKey([]byte(dto.Password), []byte("restinpeace"), 1, 64*1024, 4, 32)
 	user.Name = dto.Name
+	user.Username = dto.Username
 	user.Email = dto.Email
 	user.Password = base64.RawStdEncoding.EncodeToString(hash)
 
@@ -53,7 +55,7 @@ func SignUp(c echo.Context) error {
 }
 
 type SignInDto struct {
-	Email    string `json:"email"`
+	Username string `json:"username"`
 	Password string `json:"password"`
 }
 
@@ -104,7 +106,7 @@ func SignIn(c echo.Context) error {
 	}
 
 	user := &models.User{}
-	db.DB.Limit(1).Find(&user, "email = ?", dto.Email)
+	db.DB.Limit(1).Find(&user, "username = ?", dto.Username)
 	if user.ID == 0 {
 		return c.JSON(http.StatusNotFound, map[string]string{
 			"error": "User not found",
@@ -119,7 +121,7 @@ func SignIn(c echo.Context) error {
 
 	if subtle.ConstantTimeCompare(hash, originalHash) != 1 {
 		return c.JSON(http.StatusUnauthorized, map[string]string{
-			"error": "Invalid email or password",
+			"error": "Invalid username or password",
 		})
 	}
 
@@ -223,4 +225,19 @@ func GetUserId(c echo.Context) uint {
 		return 0
 	}
 	return uint(sub)
+}
+
+func CheckUsername(c echo.Context) error {
+	username := c.Param("username")
+	if username == "" {
+		return c.NoContent(http.StatusBadRequest)
+	}
+
+	user := &models.User{}
+	db.DB.Limit(1).Find(&user, "username = ?", username)
+	if user.ID > 0 {
+		return c.NoContent(http.StatusConflict)
+	}
+
+	return c.NoContent(http.StatusOK)
 }
